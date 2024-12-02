@@ -1,4 +1,4 @@
-# Perpetual Humanoid Control for Real-time Simulated Avatars
+# Omnigrasp: Simulated Humanoid Grasping on Diverse Objects
 
 Official implementation of NeurIPS 2024 paper: "Omnigrasp: Simulated Humanoid Grasping on Diverse Objects". Code coming soon. 
 
