@@ -1,0 +1,136 @@
+task: HumanoidGrabZ
+motion_file: ""
+num_envs: 3072
+env_spacing:  5
+episode_length: 900
+isFlagrun: False
+enable_debug_vis: False
+kp_scale: 1
+self_obs_v: 1
+obs_v: 4
+r_v: 1
+
+use_image: True
+use_image_obs: True
+camera_config:
+  width: 32
+  height: 32
+  fov: 60
+
+
+
+control_mode: "isaac_pd"
+power_reward: True
+penality_slippage: True
+power_usage_reward: False
+power_usage_coefficient: 0.01
+slippage_coefficient: 0.3
+
+shape_resampling_interval: 250
+auto_pmcp_soft: True
+obj_pmcp: True
+obj_pmcp_start: 999
+check_rot_reset: False
+
+fut_tracks: True
+numTrajSamples: 20
+trajSampleTimestepInv: 15
+enableTaskObs: True
+has_im_obs: False
+normalize_force_sensor: True
+res_hand: False
+contact_obs: True
+contact_obs_bi: False
+normalize_contact: True
+fixed_latent: True
+dyna_latent: False
+obj_rand_pos: True
+obj_rand_pos_extreme: False
+
+close_distance_pregrasp: 0.2
+close_distance_contact: 0.1
+
+
+############ Essentail Z ############
+embedding_norm: 1
+embedding_size: 48
+
+use_vae_prior: True
+use_vae_sphere_posterior: False
+use_vae_fixed_prior: False
+use_vae_sphere_prior: False
+use_vae_prior_loss: False
+
+distill: false
+save_kin_info: False
+distill_z_model: false
+z_read: False
+distill_model_config:
+  use_part: False
+  embedding_norm: 1
+  embedding_size: 48
+  fut_tracks_dropout: False
+  fut_tracks: False
+  trajSampleTimestepInv: 5
+  numTrajSamples: 10
+  z_activation: "silu"
+  z_type: "vae"
+models: ['output/HumanoidIm/phcx_vae_dex_1_3_resume/Humanoid_00016000.pth']
+############ Essentail Z ############
+
+traj_gen:
+  dtheta_max: 1
+  speed_min: 0.0
+  speed_max: 2
+  accel_max: 0.5
+  sharp_turn_prob: 0.2
+  big_obj_mode: False
+
+terminationDistance: 0.25
+grab_termination_distance: 0.12
+test_termination_distances: 0.12
+fix_height_mode: "full_fix"
+
+reward_specs:
+  k_pos: 100
+  k_rot: 10
+  k_vel: 0.1
+  k_ang_vel: 0.1
+
+  w_pos: 0.5
+  w_rot: 0.3
+  w_vel: 0.05
+  w_ang_vel: 0.05
+  w_conctact: 0.1
+
+
+
+pdControl: True
+power_scale: 1.0
+controlFrequencyInv: 2 # 30 Hz
+stateInit: "Start"
+hybridInitProb: 0.5
+numAMPObsSteps: 2
+
+local_root_obs: True
+root_height_obs: True
+ampRootHeightObs: False
+hand_bodies : ["L_Wrist", 'L_Index1', 'L_Index2', 'L_Index3', 'L_Middle1', 'L_Middle2', 'L_Middle3', 'L_Pinky1', 'L_Pinky2', 'L_Pinky3', 'L_Ring1', 'L_Ring2', 'L_Ring3', 'L_Thumb1', 'L_Thumb2', 'L_Thumb3', 
+"R_Wrist", 'R_Index1', 'R_Index2', 'R_Index3', 'R_Middle1', 'R_Middle2', 'R_Middle3', 'R_Pinky1', 'R_Pinky2', 'R_Pinky3', 'R_Ring1', 'R_Ring2', 'R_Ring3', 'R_Thumb1', 'R_Thumb2', 'R_Thumb3']
+fingertip_bodies : ['L_Index3',  'L_Middle3',  'L_Pinky3',  'L_Ring3',  'L_Thumb3',  'R_Index3', 'R_Middle3',  'R_Pinky3', 'R_Ring3',  'R_Thumb3']
+contact_sensor_bodies : ['L_Index1', 'L_Index2', 'L_Index3', 'L_Middle1', 'L_Middle2', 'L_Middle3', 'L_Pinky1', 'L_Pinky2', 'L_Pinky3', 'L_Ring1', 'L_Ring2', 'L_Ring3', 'L_Thumb1', 'L_Thumb2', 'L_Thumb3', 
+'R_Index1', 'R_Index2', 'R_Index3', 'R_Middle1', 'R_Middle2', 'R_Middle3', 'R_Pinky1', 'R_Pinky2', 'R_Pinky3', 'R_Ring1', 'R_Ring2', 'R_Ring3', 'R_Thumb1', 'R_Thumb2', 'R_Thumb3']
+
+key_bodies: ["R_Ankle", "L_Ankle", "R_Toe", "L_Toe", "R_Wrist",  "L_Wrist"]
+contact_bodies: ["R_Ankle", "L_Ankle", "R_Toe", "L_Toe"]
+reset_bodies:  ['Pelvis', 'L_Hip', 'L_Knee', 'L_Ankle', 'R_Hip', 'R_Knee', 'R_Ankle', 'Torso', 'Spine', 'Chest', 'Neck', 'Head', 'L_Thorax', 'L_Shoulder', 'L_Elbow', 'L_Wrist', 'L_Index1', 'L_Index2', 'L_Index3', 'L_Middle1', 'L_Middle2', 'L_Middle3', 'L_Pinky1', 'L_Pinky2', 'L_Pinky3', 'L_Ring1', 'L_Ring2', 'L_Ring3', 'L_Thumb1', 'L_Thumb2', 'L_Thumb3', 'R_Thorax', 'R_Shoulder', 'R_Elbow', 'R_Wrist', 'R_Index1', 'R_Index2', 'R_Index3', 'R_Middle1', 'R_Middle2', 'R_Middle3', 'R_Pinky1', 'R_Pinky2', 'R_Pinky3', 'R_Ring1', 'R_Ring2', 'R_Ring3', 'R_Thumb1', 'R_Thumb2', 'R_Thumb3']
+force_sensor_joints: ['Pelvis', 'L_Ankle', "L_Toe", 'R_Ankle', "R_Toe", 'Head', 'L_Index1', 'L_Index2', 'L_Index3', 'L_Middle1', 'L_Middle2', 'L_Middle3', 'L_Pinky1', 'L_Pinky2', 'L_Pinky3', 'L_Ring1', 'L_Ring2', 'L_Ring3', 'L_Thumb1', 'L_Thumb2', 'L_Thumb3', 'R_Index1', 'R_Index2', 'R_Index3', 'R_Middle1', 'R_Middle2', 'R_Middle3', 'R_Pinky1', 'R_Pinky2', 'R_Pinky3', 'R_Ring1', 'R_Ring2', 'R_Ring3', 'R_Thumb1', 'R_Thumb2', 'R_Thumb3']
+terminationHeight: 0.15
+enableEarlyTermination: True
+
+
+plane:
+  staticFriction: 1.0
+  dynamicFriction: 1.0
+  restitution: 0.0
+
