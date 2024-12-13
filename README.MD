@@ -1,6 +1,6 @@
-# Omnigrasp: Simulated Humanoid Grasping on Diverse Objects
+# Omnigrasp: Grasping Diverse Objects with Simulated Humanoids
 
-Official implementation of NeurIPS 2024 paper: "Omnigrasp: Simulated Humanoid Grasping on Diverse Objects". In this project, we control a simulated humanoid to grasp diverse objects and follow diverse object trajectories. 
+Official implementation of NeurIPS 2024 paper: "Omnigrasp: Grasping Diverse Objects with Simulated Humanoids". In this project, we control a simulated humanoid to grasp diverse objects and follow diverse object trajectories. 
 
 [[paper]](https://arxiv.org/abs/2407.11385) [[website]](https://zhengyiluo.github.io/Omnigrasp/) 
 
