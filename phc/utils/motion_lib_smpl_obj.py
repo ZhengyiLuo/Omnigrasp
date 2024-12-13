@@ -155,7 +155,6 @@ class MotionLibSMPLObj(MotionLibSMPL):
             quest_motion["hand_trans"] = hand_trans
             quest_motion["hand_rot"] = hand_rot
             quest_motion["contact_idx"] = obj_data['contact_info'].nonzero()[0][0]
-            # quest_motion["lift_idx"] = ((obj_trans[:, 0, 2]  - obj_trans[:1, 0, 2]) > 0.05).nonzero()[0]
 
             curr_motion.quest_motion = quest_motion
 
@@ -401,8 +400,7 @@ class MotionLibSMPLObj(MotionLibSMPL):
         self.use_hand_flag = (dist_hand_to_ref.reshape(-1, 2, hand_dim).sum(dim = -1) > 0).float()
         
         if (self.use_hand_flag.sum(dim = -1) == 0).sum() > 0:
-            import ipdb; ipdb.set_trace()
-            print("some data is bugggggged!")
+            print("No Hand is used! Is this a demo pkl? ")
         
         
         

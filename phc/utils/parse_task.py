@@ -37,16 +37,11 @@ from phc.env.tasks.vec_task_wrappers import VecTaskPythonWrapper
 from phc.env.tasks.humanoid_im_demo import HumanoidImDemo
 from phc.env.tasks.humanoid_im_mcp_demo import HumanoidImMCPDemo
 from phc.env.tasks.humanoid_im_distill import HumanoidImDistill
-from phc.env.tasks.humanoid_im_world import HumanoidImWorld
 from phc.env.tasks.humanoid_im_distill_getup import HumanoidImDistillGetup
-from phc.env.tasks.humanoid_im_interhand import HumanoidImInterhand
 
 from phc.env.tasks.humanoid_grab import HumanoidGrab, HumanoidGrabZ
 from phc.env.tasks.humanoid_omnigrab import HumanoidOmniGrab, HumanoidOmniGrabZ
 from phc.env.tasks.humanoid_omnigrasp import HumanoidOmniGrasp, HumanoidOmniGraspZ
-from phc.env.tasks.humanoid_soccer import HumanoidSoccer
-from phc.env.tasks.humanoid_speed import HumanoidSpeedZ
-
 
 from isaacgym import rlgpu
 

@@ -142,14 +142,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
         
         self.head_idx = self._build_key_body_ids_tensor(['Head'])
         self.eye_offset = [0.0, 0.075, 0.1]
-        if self.cfg.env.get("use_image", False):
-            print("Setting up camera")
-            camera_config = self.cfg.env.get("camera_config", {})
-            camera_config["width"] = camera_config.get("width", 32)
-            camera_config["height"] = camera_config.get("height", 32)
-            self.image_tensor = torch.zeros([self.num_envs, camera_config["height"], camera_config["width"]   , 3], device=self.device, dtype=torch.float32)
-            self.setup_camera(camera_config)
-        
         return
     
     
@@ -336,23 +328,15 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
             self._motion_lib.load_motions(skeleton_trees=self.skeleton_trees, gender_betas=self.humanoid_shapes.cpu(), limb_weights=self.humanoid_limb_and_weights.cpu(), random_sample=(not flags.test) and (not self.seq_motions), max_len=-1 if flags.test else self.max_len)
 
         else:
-            self._motion_lib = MotionLib(motion_file=motion_train_file, dof_body_ids=self._dof_body_ids, dof_offsets=self._dof_offsets, device=self.device)
+            raise Exception("Unsupported humanoid type: {:s}".format(self.humanoid_type))
 
         return
     
     def get_task_obs_size(self):
         obs_size = 0
         if (self._enable_task_obs):
-            if self.cfg.env.obs_v in [1, 1.5, 2]: 
+            if self.cfg.env.obs_v in [1]: 
                 obs_size = 15 * self._num_traj_samples + 9 + 10 * 3 # local pos and orientation 10 ; 9 is object position and orientation in root.  ; 10 * 3 for finger to object root position. 
-            elif self.cfg.env.obs_v in  [1.4]:
-                obs_size = 15 * self._num_traj_samples + 9  # local pos and orientation 10 ; 9 is object position and orientation in root.  ; 10 * 3 for finger to object root position. 
-            elif self.cfg.env.obs_v in  [1.6]:
-                obs_size = 6 * self._num_traj_samples + 3 + 10 * 3  # local pos and orientation 10 ; 9 is object position and orientation in root.  ; 10 * 3 for finger to object root position. 
-            elif self.cfg.env.obs_v in  [3]:
-                obs_size = 3 * 8 * self._num_traj_samples + 6 * self._num_traj_samples + 8 * 3 + 10 * 3 # box ref, velocity + angular velocity + box + fingers
-            elif self.cfg.env.obs_v in  [4]:
-                obs_size = 15 * self._num_traj_samples  # local pos and orientation 10 ; 9 is object position and orientation in root.  
             
             if self.cfg.env.has_im_obs:
                 obs_size = obs_size + len(self._track_bodies) * 24 
@@ -366,11 +350,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
             if self.cfg.env.get("use_hand_flag", False):
                 obs_size = obs_size + 2
                 
-            if self.cfg.env.get("use_image_obs", False):
-                camera_config = self.cfg.env.get("camera_config", {})
-                width = camera_config.get("width", 224)
-                height = camera_config.get("width", 224)
-                obs_size = obs_size + width * height * 3
             
             if self.cfg.env.fixed_latent:
                 obs_size += 1
@@ -384,7 +363,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
         task_obs_detail['env_to_obj_code'] = self.env_to_obj_code
         task_obs_detail["res_hand"] = self.cfg.env.get("res_hand", False)
         task_obs_detail["res_hand_dim"] = len(self.cfg.env.hand_bodies) * 3
-        task_obs_detail["use_image_obs"] = self.cfg.env.get("use_image_obs", False)
         task_obs_detail["camera_config"] = self.cfg.env.get("camera_config", {})
 
 
@@ -417,9 +395,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
             asset_options.default_dof_drive_mode = gymapi.DOF_MODE_NONE
             asset_options.vhacd_enabled = True
             
-            # asset_options.vhacd_params.max_convex_hulls = 20 # NeurIPS submission
-            # asset_options.vhacd_params.max_num_vertices_per_ch = 64 # NeurIPS submission
-            
             asset_options.vhacd_params.max_convex_hulls = 32 
             asset_options.vhacd_params.max_num_vertices_per_ch = 72
             
@@ -431,13 +406,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
             else:
                 asset_options.vhacd_params.resolution = 300000
                 
-                # Paramters from Jona
-                # asset_options.vhacd_params.max_convex_hulls = 32
-                # asset_options.vhacd_params.min_volume_per_ch = 0.0001
-                # asset_options.vhacd_params.max_num_vertices_per_ch = 72
-                # asset_options.vhacd_params.convex_hull_downsampling = 8
-                # asset_options.vhacd_params.plane_downsampling = 8
-                # asset_options.vhacd_params.resolution = 20000000 
             
             asset_options.override_com = True
             asset_options.override_inertia = True
@@ -523,7 +491,7 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
         
         static_o_ang_vel, static_o_lin_vel, static_o_rb_rot, static_o_rb_pos = motion_res['o_ang_vel'][:, 1:], motion_res['o_lin_vel'][:, 1:], motion_res['o_rb_rot'][:, 1:], motion_res['o_rb_pos'][:, 1:]
         self._table_states[env_ids, :3] = static_o_rb_pos[:, 0] 
-        self._table_states[env_ids, 2] -= (0.1 - 0.005481)/2
+        self._table_states[env_ids, 2] -= (0.1 - 0.005481)/2 # This is becuase I am using a thicker table. 
         self._table_states[env_ids, 3:7] = static_o_rb_rot[:, 0]
         self._table_states[env_ids, 7:10] = static_o_lin_vel[:, 0]
         self._table_states[env_ids, 10:13] = static_o_ang_vel[:, 0]
@@ -534,7 +502,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
     def _sample_time(self, motion_ids):
         # Motion imitation, no more blending and only sample at certain locations
         return self._motion_lib.sample_time_interval(motion_ids)
-        # return self._motion_lib.sample_time(motion_ids)
     
     def _sample_ref_state(self, env_ids):
         num_envs = env_ids.shape[0]
@@ -545,10 +512,7 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
             if self.cfg.env.get("flex_start", True):
                 motion_times = self._sample_time(self._sampled_motion_ids[env_ids])
                 
-                if self.cfg.env.get("use_stage_reward", False):
-                    motion_times = torch.clamp(motion_times, torch.zeros_like(motion_times),  self._motion_lib.get_contact_time(self._sampled_motion_ids[env_ids]) - 1) # Start before contact happens.
-                else:
-                    motion_times = torch.clamp(motion_times, torch.zeros_like(motion_times),  self._motion_lib.get_contact_time(self._sampled_motion_ids[env_ids]) - 0.5) # Start before contact happens.
+                motion_times = torch.clamp(motion_times, torch.zeros_like(motion_times),  self._motion_lib.get_contact_time(self._sampled_motion_ids[env_ids]) - 0.5) # Start before contact happens.
                     
                 if flags.test:
                     motion_times[:] = 0
@@ -559,8 +523,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
         else:
             assert (False), "Unsupported state initialization strategy: {:s}".format(str(self._state_init))
         
-        
-            
         if self.cfg.env.get("use_stage_reward", False):
             self.table_remove_frame[env_ids] = (self._motion_lib.get_contact_time(self._sampled_motion_ids[env_ids]) - motion_times)/self.dt # update table remove frame based on the sample start time of the motion. 0.25 is the raise time of the object. Bascially, the object will be raised within 0.25 second, and the table should be safe to be removed. 
         
@@ -632,18 +594,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
         
         if self.obs_v == 1:
             obs = compute_grab_observations(root_pos, root_rot, finger_pos, finger_rot, obj_pos, obj_rot, obj_lin_vel, obj_ang_vel, ref_o_rb_pos, ref_o_rb_rot, ref_o_lin_vel, ref_o_ang_vel, time_steps, self._has_upright_start)
-        elif self.obs_v == 1.4:
-            obs = compute_grab_observations_v1_4(root_pos, root_rot, finger_pos, finger_rot, obj_pos, obj_rot, obj_lin_vel, obj_ang_vel, ref_o_rb_pos, ref_o_rb_rot, ref_o_lin_vel, ref_o_ang_vel, time_steps, self._has_upright_start)
-        elif self.obs_v == 1.5:
-            obs = compute_grab_observations_v1_5(root_pos, root_rot, finger_pos, finger_rot, obj_pos, obj_rot, obj_lin_vel, obj_ang_vel, ref_o_rb_pos, ref_o_rb_rot, ref_o_lin_vel, ref_o_ang_vel, time_steps, self._has_upright_start)
-        elif self.obs_v == 1.6:
-            obs = compute_grab_observations_v1_6(root_pos, root_rot, finger_pos, finger_rot, obj_pos, obj_rot, obj_lin_vel, obj_ang_vel, ref_o_rb_pos, ref_o_rb_rot, ref_o_lin_vel, ref_o_ang_vel, time_steps, self._has_upright_start)
-        elif self.obs_v == 2:
-            obs = compute_grab_observations_v2(root_pos, root_rot, finger_pos, finger_rot, obj_pos, obj_rot, obj_lin_vel, obj_ang_vel, ref_o_rb_pos, ref_o_rb_rot, ref_o_lin_vel, ref_o_ang_vel, time_steps, self._has_upright_start)
-        elif self.obs_v == 3:
-            obs = compute_grab_observations_v3(root_pos, root_rot, finger_pos, finger_rot, obj_pos, obj_rot, obj_lin_vel, obj_ang_vel, ref_o_rb_pos, ref_o_rb_rot, ref_o_lin_vel, ref_o_ang_vel, self.bounding_box_batch[env_ids], time_steps, self._has_upright_start)
-        elif self.obs_v == 4:
-            obs = compute_grab_observations_v4(root_pos, root_rot, finger_pos, finger_rot, ref_o_rb_pos, ref_o_rb_rot, ref_o_lin_vel, ref_o_ang_vel, time_steps, self._has_upright_start)
     
         if self.cfg.env.get("contact_obs", False):
             contact_forces_fingers  = contact_forces[:, self._contact_sensor_body_ids]
@@ -675,11 +625,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
             
             obs = torch.cat([obs, use_hand_label], dim=-1)
             
-        if self.cfg.env.get("use_image", False):
-            self.render_camera(env_ids)
-            if self.cfg.env.get("use_image_obs", False):
-                obs = torch.cat([obs, self.image_tensor[env_ids].reshape(B, -1)], dim=-1)
-        
         if self.cfg.env.fixed_latent:
             obs = torch.cat([obs, env_ids[:, None]], dim=-1)
             
@@ -722,34 +667,15 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
         contact_filter = check_contact(hand_contact_force, obj_contact_forces, hand_pos, obj_pos, obj_lin_vel, table_removed, self.close_distance_contact)
         
         
-        if self.cfg.env.get("r_v", 1)  in [1]:
-            grab_reward, grab_reward_raw  = compute_grab_reward(root_pos, root_rot, obj_pos, obj_rot, obj_lin_vel, obj_ang_vel,  ref_o_rb_pos, ref_o_rb_rot, ref_o_lin_vel, ref_o_ang_vel,  contact_filter, self.reward_specs)
-        if self.cfg.env.get("r_v", 1.5)  in [1.5]:
-            assert(self.cfg.env.get("use_stage_reward", False) and  self.reward_specs['w_pos'] == 0.6)
-            grab_reward, grab_reward_raw  = compute_grab_reward_v15(root_pos, root_rot, obj_pos, obj_rot, obj_lin_vel, obj_ang_vel,  ref_o_rb_pos, ref_o_rb_rot, ref_o_lin_vel, ref_o_ang_vel,  contact_filter, self.reward_specs)
-        elif self.cfg.env.get("r_v", 1)  in [2]:
-            grab_reward, grab_reward_raw  = compute_grab_reward_v2(root_pos, root_rot, obj_pos, obj_rot, obj_lin_vel, obj_ang_vel,  ref_o_rb_pos, ref_o_rb_rot, ref_o_lin_vel, ref_o_ang_vel, self.bounding_box_batch, contact_filter, self.reward_specs)
-        
+        grab_reward, grab_reward_raw  = compute_grab_reward(root_pos, root_rot, obj_pos, obj_rot, obj_lin_vel, obj_ang_vel,  ref_o_rb_pos, ref_o_rb_rot, ref_o_lin_vel, ref_o_ang_vel,  contact_filter, self.reward_specs)
         
         if self.cfg.env.get("pregrasp_reward", True):
-            if self.cfg.env.get("use_stage_reward", False): # contact based 
-                contact_hand_dict = self._motion_lib.get_contact_hand_pose(self._sampled_motion_ids)
-                ref_contact_hand_pos, ref_contact_hand_rot, ref_contact_hand_vel, ref_contact_hand_ang_vel, contact_ref_obj_pos = contact_hand_dict['contact_hand_trans'],  contact_hand_dict['contact_hand_rot'], contact_hand_dict['contact_hand_vel'], contact_hand_dict['contact_hand_ang_vel'], contact_hand_dict['contact_ref_obj_pos']
-                pregrasp_reward, pregrasp_reward_raw = compute_pregrasp_reward_contact(root_pos, root_rot, hand_pos, hand_rot, hand_vel, hand_ang_vel, ref_contact_hand_pos, ref_contact_hand_rot, ref_contact_hand_vel, ref_contact_hand_ang_vel,  contact_ref_obj_pos, obj_pos, self._hand_pos_prev, self.close_distance_pregrasp,  table_removed_flag, self.reward_specs)
-                grab_reward[~contact_filter] = pregrasp_reward[~contact_filter]
-                grab_reward[contact_filter] += 0.5 # Advance stage reward. 
-                
-            else: # Time based. 
-                contact_hand_dict = self._motion_lib.get_contact_hand_pose(self._sampled_motion_ids)
-                ref_contact_hand_pos, ref_contact_hand_rot, ref_contact_hand_vel, ref_contact_hand_ang_vel, contact_ref_obj_pos = contact_hand_dict['contact_hand_trans'],  contact_hand_dict['contact_hand_rot'], contact_hand_dict['contact_hand_vel'], contact_hand_dict['contact_hand_ang_vel'], contact_hand_dict['contact_ref_obj_pos']
-                pregrasp_reward, pregrasp_reward_raw = compute_pregrasp_reward_time(root_pos, root_rot, hand_pos, hand_rot, hand_vel, hand_ang_vel, ref_contact_hand_pos, ref_contact_hand_rot, ref_contact_hand_vel, ref_contact_hand_ang_vel,  contact_ref_obj_pos, self._hand_pos_prev, self.close_distance_pregrasp,  self.reward_specs)
-                pass_contact_time = motion_times > self.grasp_start_frame * self.dt
-                grab_reward[~pass_contact_time] = pregrasp_reward[~pass_contact_time]
+            contact_hand_dict = self._motion_lib.get_contact_hand_pose(self._sampled_motion_ids)
+            ref_contact_hand_pos, ref_contact_hand_rot, ref_contact_hand_vel, ref_contact_hand_ang_vel, contact_ref_obj_pos = contact_hand_dict['contact_hand_trans'],  contact_hand_dict['contact_hand_rot'], contact_hand_dict['contact_hand_vel'], contact_hand_dict['contact_hand_ang_vel'], contact_hand_dict['contact_ref_obj_pos']
+            pregrasp_reward, pregrasp_reward_raw = compute_pregrasp_reward_time(root_pos, root_rot, hand_pos, hand_rot, hand_vel, hand_ang_vel, ref_contact_hand_pos, ref_contact_hand_rot, ref_contact_hand_vel, ref_contact_hand_ang_vel,  contact_ref_obj_pos, self._hand_pos_prev, self.close_distance_pregrasp,  self.reward_specs)
+            pass_contact_time = motion_times > self.grasp_start_frame * self.dt
+            grab_reward[~pass_contact_time] = pregrasp_reward[~pass_contact_time]
 
-        # if torch.isnan(grab_reward).any():
-        #     import ipdb; ipdb.set_trace()
-        #     print('....')
-            
         self.rew_buf[:], self.reward_raw =  grab_reward , torch.cat([grab_reward_raw], dim=-1)
         
         if self.cfg.env.get("penality_slippage", False):
@@ -876,11 +802,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
     
     def post_physics_step(self):
 
-        # if (self.progress_buf > 60).sum() > 0:
-        #     import ipdb; ipdb.set_trace()
-        #     joblib.dump({k: self._obj_states.cpu().numpy()[i] for i, k in  enumerate(self._motion_lib.curr_motion_keys)}, "obj_states_virtual.pkl")
-        #     print('....')
-            
         if self.save_kin_info: # this needs to happen BEFORE the next time-step observation is computed, to collect the "current time-step target"
             self.extras['kin_dict'] = self.kin_dict
             
@@ -956,14 +877,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
             starts = self._humanoid_root_states[..., 0:3]
             ends = self._obj_states[..., 0:3]
             verts = torch.cat([starts, ends], dim=-1).cpu().numpy()
-
-            # if not flags.real_traj:
-            #     for i, env_ptr in enumerate(self.envs):
-            #         curr_verts = verts[i]
-            #         curr_verts = curr_verts.reshape([1, 6])
-            #         self.gym.add_lines(self.viewer, env_ptr, curr_verts.shape[0], curr_verts, cols)
-                
-            # import ipdb; ipdb.set_trace()
             contact_hand_trans = self._motion_lib.get_contact_hand_pose(self._sampled_motion_ids)['contact_hand_trans']
 
             env_ids = self._sampled_motion_ids
@@ -990,25 +903,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
             for env_id in range(self.num_envs):
                 if flags.real_traj:
                     
-                    # if self.progress_buf[env_id] > self.table_remove_frame:
-                    #     if self.progress_buf[env_id] == self.table_remove_frame + 1:
-                    #         self.save_pos = []
-                    #     else:
-                    #         self.save_pos.append(self._obj_states[0, :3].cpu().numpy())
-                        
-                    #         sphere_geom_marker = gymutil.WireframeSphereGeometry(0.01, 10, 10, None, color=(1, 0.41015625, 0.703125) )
-                            
-                    #         for obj_pos in self.save_pos:
-                    #             pos = obj_pos
-                    #             sphere_pose = gymapi.Transform(gymapi.Vec3(pos[0], pos[1], pos[2]), r=None)
-                    #             gymutil.draw_lines(sphere_geom_marker, self.gym, self.viewer, self.envs[env_id], sphere_pose) 
-                        
-                        
-                    # for time_step in range(time_steps):
-                    #     # sphere_geom_marker = gymutil.WireframeSphereGeometry(0.04 * (1 - time_step/len(o_rb_pos)), 5, 5, None, color=(0.0, 1 * (1 - time_step/len(o_rb_pos)), 0.0) )
-                    #     sphere_geom_marker = gymutil.WireframeSphereGeometry(0.025, 10, 10, None, color=(0.0, 1, 0.0) )
-                    #     sphere_pose = gymapi.Transform(gymapi.Vec3(o_rb_pos[env_id, time_step, 0, 0], o_rb_pos[env_id, time_step, 0, 1], o_rb_pos[env_id, time_step, 0, 2]), r=None)
-                    #     gymutil.draw_lines(sphere_geom_marker, self.gym, self.viewer, self.envs[env_id], sphere_pose) 
                     
                     for time_step in range(time_steps):
                         # sphere_geom_marker = gymutil.WireframeSphereGeometry(0.04 * (1 - time_step/len(o_rb_pos)), 5, 5, None, color=(0.0, 1 * (1 - time_step/len(o_rb_pos)), 0.0) )
@@ -1027,43 +921,6 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
                         sphere_pose = gymapi.Transform(gymapi.Vec3(o_rb_pos[env_id, time_step, 0, 0], o_rb_pos[env_id, time_step, 0, 1], o_rb_pos[env_id, time_step, 0, 2]), r=None)
                         gymutil.draw_lines(sphere_geom_marker, self.gym, self.viewer, self.envs[env_id], sphere_pose) 
                     
-                    # ###### Drawing the boxes. 
-                    # obj_pos = self._obj_states[..., 0:3]
-                    # obj_rot = self._obj_states[..., 3:7]    
-                    # new_boxes = (torch_utils.my_quat_rotate(obj_rot[:, None].repeat(1, 8, 1).view(-1, 4), self.bounding_box_batch .view(-1, 3))).view(-1, 8, 3) + obj_pos[:, None]
-                        
-                    # for i in range(new_boxes.shape[1]):
-                    #     bbox = new_boxes[env_id, i]
-                        
-                    #     sphere_geom_marker = gymutil.WireframeSphereGeometry(0.015, 10, 10, None, color=(1.0, 0, 0.0) )
-                    #     sphere_pose = gymapi.Transform(gymapi.Vec3(bbox[0], bbox[1], bbox[2]), r=None)
-                    #     gymutil.draw_lines(sphere_geom_marker, self.gym, self.viewer, self.envs[env_id], sphere_pose) 
-                        
-                    # new_box = new_boxes[env_id].cpu().numpy()
-                    # lines = np.array([
-                    #         [new_box[0], new_box[1]],
-                    #         [new_box[1], new_box[2]],
-                    #         [new_box[2], new_box[3]],
-                    #         [new_box[3], new_box[0]],
-                    #         [new_box[4], new_box[5]],
-                    #         [new_box[5], new_box[6]],
-                    #         [new_box[6], new_box[7]],
-                    #         [new_box[7], new_box[4]],
-                    #         [new_box[0], new_box[4]],
-                    #         [new_box[1], new_box[5]],
-                    #         [new_box[2], new_box[6]],
-                    #         [new_box[3], new_box[7]]
-                    # ])
-                    # for line in lines:
-                    #     self.gym.add_lines(self.viewer, self.envs[env_id], 1, line, (1.0, 0, 0.0))
-                    
-                
-                    # for jt_num in range(contact_hand_trans.shape[1]):
-                    #     sphere_geom_marker = gymutil.WireframeSphereGeometry(0.005, 5, 5, None, color=(0.0, 0, 0.0) )
-                    #     sphere_pose = gymapi.Transform(gymapi.Vec3(contact_hand_trans[env_id, jt_num, 0], contact_hand_trans[env_id,  jt_num, 1], contact_hand_trans[env_id,  jt_num, 2]), r=None)
-                    #     gymutil.draw_lines(sphere_geom_marker, self.gym, self.viewer, self.envs[env_id], sphere_pose) 
-                    
-            
                 
         return
 
@@ -1111,62 +968,10 @@ class HumanoidOmniGrasp(humanoid_amp_task.HumanoidAMPTask):
         rew_airTime = torch.sum((self.feet_air_time - 0.25) * first_contact, dim=1) # reward only on first contact with the ground
         self.feet_air_time *= ~contact_filt
         return rew_airTime
-    
-    def setup_camera(self, camera_config):
-        self.render_camera_handles = []
-        camera_props = gymapi.CameraProperties()
-        camera_props.width = camera_config['width']
-        camera_props.height = camera_config['height']
-        camera_props.enable_tensors = True
-        
-        for env_ptr in self.envs:
-            camera_handle = self.gym.create_camera_sensor(env_ptr, camera_props)
-            self.gym.set_camera_location(camera_handle, env_ptr, gymapi.Vec3(0, 0, 0), gymapi.Vec3(0, 0, 0))
-            self.render_camera_handles.append(camera_handle)
-            
-        pass
-            
-            
-    def render_camera(self, env_ids):
-        head_pos = self._rigid_body_pos[:, self.head_idx]
-        head_rot = self._rigid_body_rot[:, self.head_idx]
-        obj_pos = self._obj_states[:, 0:3].cpu().numpy()
-        start = time.time()
-        
-        pos = head_pos[:, 0, :]
-        # target = obj_pos[env_ids, :].reshape(-1, obj_pos.shape[-1])
-        eye_offset = torch.tensor([self.eye_offset] * self.num_envs, device=head_rot.device)
-        pos_near = pos + torch_utils.my_quat_rotate(head_rot[:, 0], eye_offset)
-        
-        eyesigt_direction = torch.tensor([[0.0, 0, 0.5]] * self.num_envs, device=head_rot.device)
-        target = pos_near + torch_utils.my_quat_rotate(head_rot[:, 0], eyesigt_direction)
-        
-        for env_id in env_ids:
-            self.gym.set_camera_location(self.render_camera_handles[env_id], self.envs[env_id], gymapi.Vec3(pos_near[env_id][0], pos_near[env_id][1], pos_near[env_id][2]), gymapi.Vec3(target[env_id][0], target[env_id][1], target[env_id][2]))
-            
-        self.gym.render_all_camera_sensors(self.sim)
-        self.gym.start_access_image_tensors(self.sim)
-
-        # todo: THE CAMERA VIEW CHANGE STEP BY STEP
-
-        for env_id in env_ids:
-            camera_rgba_tensor = self.gym.get_camera_image_gpu_tensor(self.sim, self.envs[env_id], self.render_camera_handles[env_id], gymapi.IMAGE_COLOR)
-            self.image_tensor[env_id] = gymtorch.wrap_tensor(camera_rgba_tensor)[:, :, :3].float()  
-        # print("time of render {} frames' image: {}".format(env_id, (time.time() - start)))
-        import ipdb; ipdb.set_trace()
-        self.gym.end_access_image_tensors(self.sim)
-        return 
-    
+ 
     def render(self, sync_frame_time = False):
         super().render(sync_frame_time=sync_frame_time)
-        # if ((not self.headless) ) and self.cfg.get("use_image", False):
         
-        # if (not self.headless) and self.cfg.env.get("use_image", False):
-        #     ref_image = self.image_tensor.squeeze().numpy()/255
-            
-        #     if self.num_envs == 1:
-        #         cv2.imshow("mono image", ref_image)
-        #         cv2.waitKey(1)
 
 
             
@@ -1293,265 +1098,9 @@ def compute_grab_observations(root_pos, root_rot, fingertip_pos, fingertip_rot, 
     obs = torch.cat(obs, dim=-1).view(B, -1)
     return obs
 
+ 
 
 @torch.jit.script
-def compute_grab_observations_v1_4(root_pos, root_rot, fingertip_pos, fingertip_rot, obj_pos, obj_rot, o_lin_vel, o_ang_vel, ref_obj_pos, ref_obj_rot, ref_o_vel, ref_o_ang_vel, time_steps, upright):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor,Tensor, Tensor, Tensor,Tensor, Tensor,Tensor,Tensor, int, bool) -> Tensor
-    # No hand object relative position information. 
-    obs = []
-    B, J, _ = obj_pos.shape
-    if not upright:
-        root_rot = remove_base_rot(root_rot)
-    
-    heading_inv_rot = torch_utils.calc_heading_quat_inv(root_rot)
-    heading_rot = torch_utils.calc_heading_quat(root_rot)
-    heading_inv_rot_expand = heading_inv_rot.unsqueeze(-2).repeat((1, J, 1)).repeat_interleave(time_steps, 0)
-    heading_rot_expand = heading_rot.unsqueeze(-2).repeat((1, J, 1)).repeat_interleave(time_steps, 0)
-    
-
-    ##### Body position and rotation differences
-    diff_global_body_pos = ref_obj_pos.view(B, time_steps, J, 3) - obj_pos.view(B, 1, J, 3)
-    diff_local_body_pos_flat = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), diff_global_body_pos.view(-1, 3))
-
-    diff_global_body_rot = torch_utils.quat_mul(ref_obj_rot.view(B, time_steps, J, 4), torch_utils.quat_conjugate(obj_rot[:, None]).repeat_interleave(time_steps, 1))
-    diff_local_body_rot_flat = torch_utils.quat_mul(torch_utils.quat_mul(heading_inv_rot_expand.view(-1, 4), diff_global_body_rot.view(-1, 4)), heading_rot_expand.view(-1, 4))  # Need to be change of basis
-    
-    ##### linear and angular  Velocity differences
-    diff_global_vel = ref_o_vel.view(B, time_steps, J, 3) - o_lin_vel.view(B, 1, J, 3)
-    diff_local_vel = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), diff_global_vel.view(-1, 3))
-
-
-    diff_global_ang_vel = ref_o_ang_vel.view(B, time_steps, J, 3) - o_ang_vel.view(B, 1, J, 3)
-    diff_local_ang_vel = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), diff_global_ang_vel.view(-1, 3))
-    
-    ##### Object position and rotation in body frame
-    local_o_body_pos = obj_pos.view(B, 1, J, 3) - root_pos.view(B, 1, 1, 3)  # preserves the body position
-    local_o_body_pos = torch_utils.my_quat_rotate(heading_inv_rot.view(-1, 4), local_o_body_pos.view(-1, 3))
-
-    local_o_body_rot = torch_utils.quat_mul(heading_inv_rot.view(-1, 4), obj_rot.view(-1, 4))
-    local_o_body_rot = torch_utils.quat_to_tan_norm(local_o_body_rot)
-    
-    
-    obs.append(diff_local_body_pos_flat.view(B, -1))  # 1 * timestep * 24 * 3
-    obs.append(torch_utils.quat_to_tan_norm(diff_local_body_rot_flat).view(B, -1))  #  1 * timestep * 24 * 6
-    obs.append(diff_local_vel.view(B, -1))  # timestep  * 24 * 3
-    obs.append(diff_local_ang_vel.view(B, -1))  # timestep  * 24 * 3
-    obs.append(local_o_body_pos.view(B, -1))  # timestep  * 24 * 3
-    obs.append(local_o_body_rot.view(B, -1))  # timestep  * 24 * 6
-    
-    obs = torch.cat(obs, dim=-1).view(B, -1)
-    return obs
-
-
-
-@torch.jit.script
-def compute_grab_observations_v1_5(root_pos, root_rot, fingertip_pos, fingertip_rot, obj_pos, obj_rot, o_lin_vel, o_ang_vel, ref_obj_pos, ref_obj_rot, ref_o_vel, ref_o_ang_vel, time_steps, upright):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor,Tensor, Tensor, Tensor,Tensor, Tensor,Tensor,Tensor, int, bool) -> Tensor
-    # Adding pose information at the back
-    # Future tracks in this obs will not contain future diffs.
-    obs = []
-    B, J, _ = obj_pos.shape
-    if not upright:
-        root_rot = remove_base_rot(root_rot)
-    
-    heading_inv_rot = torch_utils.calc_heading_quat_inv(root_rot)
-    heading_rot = torch_utils.calc_heading_quat(root_rot)
-    heading_inv_rot_expand = heading_inv_rot.unsqueeze(-2).repeat((1, J, 1)).repeat_interleave(time_steps, 0)
-    heading_rot_expand = heading_rot.unsqueeze(-2).repeat((1, J, 1)).repeat_interleave(time_steps, 0)
-    
-    ##### Body position and rotation differences
-    diff_global_body_pos = ref_obj_pos.view(B, time_steps, J, 3) - root_pos.view(B, 1, J, 3) # Object future trajectory, in the body frame. 
-    diff_local_body_pos_flat = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), diff_global_body_pos.view(-1, 3))
-
-    diff_global_body_rot = torch_utils.quat_mul(ref_obj_rot.view(B, time_steps, J, 4), torch_utils.quat_conjugate(root_rot[:, None, None]).repeat_interleave(time_steps, 1))
-    diff_local_body_rot_flat = torch_utils.quat_mul(torch_utils.quat_mul(heading_inv_rot_expand.view(-1, 4), diff_global_body_rot.view(-1, 4)), heading_rot_expand.view(-1, 4))  # Need to be change of basis
-    
-    ##### reference linear and angular Velocity 
-    local_obj_vel = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), ref_o_vel.view(-1, 3))
-
-    local_obj_ang_vel = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), ref_o_ang_vel.view(-1, 3))
-    
-    ##### Object position and rotation in body frame
-    local_o_body_pos = obj_pos.view(B, 1, J, 3) - root_pos.view(B, 1, 1, 3)  # preserves the body position
-    local_o_body_pos = torch_utils.my_quat_rotate(heading_inv_rot.view(-1, 4), local_o_body_pos.view(-1, 3))
-
-    local_o_body_rot = torch_utils.quat_mul(heading_inv_rot.view(-1, 4), obj_rot.view(-1, 4))
-    local_o_body_rot = torch_utils.quat_to_tan_norm(local_o_body_rot)
-
-
-    B, J_f, _ = fingertip_pos.shape
-    diff_global_finger_to_obj_pos = fingertip_pos - obj_pos
-    heading_inv_rot_expand = heading_inv_rot.unsqueeze(-2).repeat((1, J_f, 1))
-    local_finger_to_obj_pos = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), diff_global_finger_to_obj_pos.view(-1, 3))
-
-    
-    obs.append(diff_local_body_pos_flat.view(B, -1))  # 1 * timestep * 24 * 3
-    obs.append(torch_utils.quat_to_tan_norm(diff_local_body_rot_flat).view(B, -1))  #  1 * timestep * 24 * 6
-    obs.append(local_obj_vel.view(B, -1))  # timestep  * 24 * 3
-    obs.append(local_obj_ang_vel.view(B, -1))  # timestep  * 24 * 3
-    obs.append(local_o_body_pos.view(B, -1))  # timestep  * 24 * 3
-    obs.append(local_o_body_rot.view(B, -1))  # timestep  * 24 * 6
-    obs.append(local_finger_to_obj_pos.view(B, -1))  # 10 * 3
-    
-    obs = torch.cat(obs, dim=-1).view(B, -1)
-    return obs
-
-@torch.jit.script
-def compute_grab_observations_v1_6(root_pos, root_rot, fingertip_pos, fingertip_rot, obj_pos, obj_rot, o_lin_vel, o_ang_vel, ref_obj_pos, ref_obj_rot, ref_o_vel, ref_o_ang_vel, time_steps, upright):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor,Tensor, Tensor, Tensor,Tensor, Tensor,Tensor,Tensor, int, bool) -> Tensor
-    # Rotation only
-    # Future tracks in this obs will not contain future diffs.
-    obs = []
-    B, J, _ = obj_pos.shape
-    if not upright:
-        root_rot = remove_base_rot(root_rot)
-    
-    heading_inv_rot = torch_utils.calc_heading_quat_inv(root_rot)
-    heading_rot = torch_utils.calc_heading_quat(root_rot)
-    heading_inv_rot_expand = heading_inv_rot.unsqueeze(-2).repeat((1, J, 1)).repeat_interleave(time_steps, 0)
-    heading_rot_expand = heading_rot.unsqueeze(-2).repeat((1, J, 1)).repeat_interleave(time_steps, 0)
-    
-
-    ##### Body position and rotation differences
-    diff_global_body_pos = ref_obj_pos.view(B, time_steps, J, 3) - obj_pos.view(B, 1, J, 3)
-    diff_local_body_pos_flat = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), diff_global_body_pos.view(-1, 3))
-
-    ##### linear and angular  Velocity differences
-    diff_global_vel = ref_o_vel.view(B, time_steps, J, 3) - o_lin_vel.view(B, 1, J, 3)
-    diff_local_vel = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), diff_global_vel.view(-1, 3))
-
-    ##### Object position and rotation in body frame
-    local_o_body_pos = obj_pos.view(B, 1, J, 3) - root_pos.view(B, 1, 1, 3)  # preserves the body position
-    local_o_body_pos = torch_utils.my_quat_rotate(heading_inv_rot.view(-1, 4), local_o_body_pos.view(-1, 3))
-
-
-    B, J_f, _ = fingertip_pos.shape
-    diff_global_finger_to_obj_pos = fingertip_pos - obj_pos
-    heading_inv_rot_expand = heading_inv_rot.unsqueeze(-2).repeat((1, J_f, 1))
-    local_finger_to_obj_pos = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), diff_global_finger_to_obj_pos.view(-1, 3))
-
-    
-    obs.append(diff_local_body_pos_flat.view(B, -1))  # 1 * timestep * 24 * 3
-    obs.append(diff_local_vel.view(B, -1))  # timestep  * 24 * 3
-    obs.append(local_o_body_pos.view(B, -1))  # timestep  * 24 * 3
-    obs.append(local_finger_to_obj_pos.view(B, -1))  # 10 * 3
-    
-    obs = torch.cat(obs, dim=-1).view(B, -1)
-    return obs
-
-
-
-@torch.jit.script
-def compute_grab_observations_v2(root_pos, root_rot, fingertip_pos, fingertip_rot, obj_pos, obj_rot, o_lin_vel, o_ang_vel, ref_obj_pos, ref_obj_rot, ref_o_vel, ref_o_ang_vel, time_steps, upright):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor,Tensor, Tensor, Tensor,Tensor, Tensor,Tensor,Tensor, int, bool) -> Tensor
-    # Adding pose information at the back
-    # Object centric
-    obs = []
-    B, J, _ = obj_pos.shape
-    if not upright:
-        root_rot = remove_base_rot(root_rot)
-    
-    # heading_inv_rot = torch_utils.calc_heading_quat_inv(root_rot)
-    # heading_rot = torch_utils.calc_heading_quat(root_rot)
-    obj_inv_rot = torch_utils.quat_conjugate(obj_rot)
-    
-    obj_rot_inv_rot_expand = obj_inv_rot.repeat((1, J, 1)).repeat_interleave(time_steps, 0)
-    obj_rot_expand = obj_rot.repeat((1, J, 1)).repeat_interleave(time_steps, 0)
-    
-
-    ##### Body position and rotation differences
-    diff_global_obj_pos = ref_obj_pos.view(B, time_steps, J, 3) - obj_pos.view(B, 1, J, 3)
-    diff_local_obj_pos_flat = torch_utils.my_quat_rotate(obj_rot_inv_rot_expand.view(-1, 4), diff_global_obj_pos.view(-1, 3))
-
-    diff_global_body_rot = torch_utils.quat_mul(ref_obj_rot.view(B, time_steps, J, 4), obj_rot_inv_rot_expand.view(B, time_steps, J, 4))
-    diff_local_body_rot_flat = torch_utils.quat_mul(torch_utils.quat_mul(obj_rot_inv_rot_expand.view(-1, 4), diff_global_body_rot.view(-1, 4)), obj_rot_expand.view(-1, 4))  # Need to be change of basis
-    
-    ##### linear and angular  Velocity differences
-    diff_global_vel = ref_o_vel.view(B, time_steps, J, 3) - o_lin_vel.view(B, 1, J, 3)
-    diff_local_vel = torch_utils.my_quat_rotate(obj_rot_inv_rot_expand.view(-1, 4), diff_global_vel.view(-1, 3))
-
-
-    diff_global_ang_vel = ref_o_ang_vel.view(B, time_steps, J, 3) - o_ang_vel.view(B, 1, J, 3)
-    diff_local_ang_vel = torch_utils.my_quat_rotate(obj_rot_inv_rot_expand.view(-1, 4), diff_global_ang_vel.view(-1, 3))
-    
-    ##### Body bosition and orientation in object frame
-    local_o_body_pos = root_pos.view(B, 1, 1, 3) - obj_pos.view(B, 1, J, 3)   # preserves the body position
-    local_o_body_pos = torch_utils.my_quat_rotate(obj_inv_rot.view(-1, 4), local_o_body_pos.view(-1, 3))
-
-    local_o_body_rot = torch_utils.quat_mul(obj_inv_rot.view(-1, 4), root_rot.view(-1, 4))
-    local_o_body_rot = torch_utils.quat_to_tan_norm(local_o_body_rot)
-
-
-    B, J_f, _ = fingertip_pos.shape
-    diff_global_finger_to_obj_pos = fingertip_pos - obj_pos
-    obj_rot_inv_rot_expand = obj_inv_rot.repeat((1, J_f, 1))
-    local_finger_to_obj_pos = torch_utils.my_quat_rotate(obj_rot_inv_rot_expand.view(-1, 4), diff_global_finger_to_obj_pos.view(-1, 3))
-
-    
-    obs.append(diff_local_obj_pos_flat.view(B, -1))  # 1 * timestep * 24 * 3
-    obs.append(torch_utils.quat_to_tan_norm(diff_local_body_rot_flat).view(B, -1))  #  1 * timestep * 24 * 6
-    obs.append(diff_local_vel.view(B, -1))  # timestep  * 24 * 3
-    obs.append(diff_local_ang_vel.view(B, -1))  # timestep  * 24 * 3
-    obs.append(local_o_body_pos.view(B, -1))  # timestep  * 24 * 3
-    obs.append(local_o_body_rot.view(B, -1))  # timestep  * 24 * 6
-    obs.append(local_finger_to_obj_pos.view(B, -1))  # 10 * 3
-    
-    obs = torch.cat(obs, dim=-1).view(B, -1)
-    return obs
-
-#### BBox 
-@torch.jit.script
-def compute_grab_observations_v3(root_pos, root_rot, fingertip_pos, fingertip_rot, obj_pos, obj_rot, o_lin_vel, o_ang_vel, ref_obj_pos, ref_obj_rot, ref_o_vel, ref_o_ang_vel, bounding_boxes, time_steps, upright):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor,Tensor, Tensor, Tensor,Tensor, Tensor,Tensor,Tensor, Tensor, int, bool) -> Tensor
-    # Object centric
-    obs = []
-    B, J, _ = obj_pos.shape
-    bbox_j = 8
-    if not upright:
-        root_rot = remove_base_rot(root_rot)
-    
-    obj_inv_rot = torch_utils.quat_conjugate(obj_rot)
-    
-    obj_rot_inv_rot_expand = obj_inv_rot.repeat((1, J, 1)).repeat_interleave(time_steps, 0)
-    obj_rot_inv_rot_expand_bbox = obj_inv_rot.repeat((1, bbox_j, 1))
-    obj_rot_inv_rot_expand_bbox_timestep = obj_rot_inv_rot_expand_bbox.repeat_interleave(time_steps, 0)
-    
-    # new_boxes = (torch_utils.my_quat_rotate(obj_rot[:, None].repeat(1, 8, 1).view(-1, 4), self.bounding_box_batch .view(-1, 3))).view(-1, 8, 3) + obj_pos[:, None]
-    boungding_box_obj = torch_utils.my_quat_rotate(obj_rot.repeat(1, 8, 1).view(-1, 4), bounding_boxes.view(-1, 3)).view(B, 8, 3) + obj_pos
-    boungding_box_ref = torch_utils.my_quat_rotate(ref_obj_rot.repeat(1, 8, 1).view(-1, 4), bounding_boxes.repeat(time_steps, 1, 1).view(-1, 3)).view(-1, 8, 3) + ref_obj_pos
-    
-    ##### Body position and rotation differences
-    diff_global_obj_pos = boungding_box_ref.view(B, time_steps, bbox_j, 3) - boungding_box_obj.view(B, 1, bbox_j, 3)
-    diff_local_bbox_flat = torch_utils.my_quat_rotate(obj_rot_inv_rot_expand_bbox_timestep.view(-1, 4), diff_global_obj_pos.view(-1, 3))
-    
-    ##### linear and angular  Velocity differences
-    diff_global_vel = ref_o_vel.view(B, time_steps, J, 3) - o_lin_vel.view(B, 1, J, 3)
-    diff_local_vel = torch_utils.my_quat_rotate(obj_rot_inv_rot_expand.view(-1, 4), diff_global_vel.view(-1, 3))
-
-
-    diff_global_ang_vel = ref_o_ang_vel.view(B, time_steps, J, 3) - o_ang_vel.view(B, 1, J, 3)
-    diff_local_ang_vel = torch_utils.my_quat_rotate(obj_rot_inv_rot_expand.view(-1, 4), diff_global_ang_vel.view(-1, 3))
-    
-    ##### Body bosition and orientation in object frame
-    local_obj_bbox_pos = root_pos.view(B, 1, 3) - boungding_box_obj   # preserves the body position
-    local_obj_bbox_pos = torch_utils.my_quat_rotate(obj_rot_inv_rot_expand_bbox.view(-1, 4), local_obj_bbox_pos.view(-1, 3))
-
-    B, J_f, _ = fingertip_pos.shape
-    diff_global_finger_to_obj_pos = fingertip_pos - obj_pos
-    obj_rot_inv_rot_expand = obj_inv_rot.repeat((1, J_f, 1))
-    local_finger_to_obj_pos = torch_utils.my_quat_rotate(obj_rot_inv_rot_expand.view(-1, 4), diff_global_finger_to_obj_pos.view(-1, 3))
-
-    
-    obs.append(diff_local_bbox_flat.view(B, -1))  # 1 * timestep * 8 * 3
-    obs.append(diff_local_vel.view(B, -1))  # timestep  * 1 * 3
-    obs.append(diff_local_ang_vel.view(B, -1))  # timestep  * 1 * 3
-    obs.append(local_obj_bbox_pos.view(B, -1))  # timestep  * 8 * 3
-    obs.append(local_finger_to_obj_pos.view(B, -1))  # 10 * 3
-    
-    obs = torch.cat(obs, dim=-1).view(B, -1)
-    return obs
-
-# @torch.jit.script
 def compute_pregrasp_reward_time(root_pos, root_rot, hand_pos, hand_rot, hand_vel, hand_ang_vel, ref_hand_pos, ref_hand_rot, ref_hand_vel, ref_hand_ang_vel, ref_obj_pos, hand_pos_prev, close_distance, rwd_specs):
     # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor,Tensor, Tensor, Tensor, Tensor, float, Dict[str, float]) -> Tuple[Tensor, Tensor]
     k_pos, k_rot, k_vel, k_ang_vel = rwd_specs["k_pos"], rwd_specs["k_rot"], rwd_specs["k_vel"], rwd_specs["k_ang_vel"]
@@ -1576,50 +1125,6 @@ def compute_pregrasp_reward_time(root_pos, root_rot, hand_pos, hand_rot, hand_ve
     distance[~close_hand_flag] = 0
     diff_body_pos_dist = distance.sum(dim=-1)/close_hand_flag.sum(dim=-1)
     r_body_pos = torch.exp(-k_pos * diff_body_pos_dist)
-
-    # hand rotation reward
-    diff_global_body_rot = torch_utils.quat_mul(ref_hand_rot, torch_utils.quat_conjugate(hand_rot))
-    diff_global_body_angle = torch_utils.quat_to_angle_axis(diff_global_body_rot)[0]
-    diff_global_body_angle[~close_hand_flag] = 0
-    diff_global_body_angle_dist = (diff_global_body_angle**2).sum(dim=-1)/close_hand_flag.sum(dim=-1)
-    r_body_rot = torch.exp(-k_rot * diff_global_body_angle_dist)
-
-    r_body_pos[distance_filter] = closer_to_hand_r[distance_filter]
-    r_body_rot[distance_filter] = closer_to_hand_r[distance_filter]
-    
-    reward = w_pos * r_body_pos + w_rot * r_body_rot 
-    reward_raw = torch.stack([r_body_pos, r_body_rot], dim=-1)
-    
-    return reward, reward_raw
-
-
-@torch.jit.script
-def compute_pregrasp_reward_contact(root_pos, root_rot, hand_pos, hand_rot, hand_vel, hand_ang_vel, ref_hand_pos, ref_hand_rot, ref_hand_vel, ref_hand_ang_vel, ref_obj_pos, obj_pos, hand_pos_prev, close_distance, table_removed_flag, rwd_specs):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor,Tensor, Tensor, Tensor, Tensor, Tensor, float, Tensor, Dict[str, float]) -> Tuple[Tensor, Tensor]
-    k_pos, k_rot, k_vel, k_ang_vel = rwd_specs["k_pos"], rwd_specs["k_rot"], rwd_specs["k_vel"], rwd_specs["k_ang_vel"]
-    w_pos, w_rot, w_vel, w_ang_vel = rwd_specs["w_pos"], rwd_specs["w_rot"], rwd_specs["w_vel"], rwd_specs["w_ang_vel"]
-    w_pos, w_rot = 0.9, 0.1
-    
-    # body position reward
-    diff_hand_to_object = torch.norm(ref_hand_pos - obj_pos, dim = -1, p = 2)
-    close_hand_flag = diff_hand_to_object < close_distance # This flag decides whether the reference hand should be used in computing the pregrasp reward; is it close? 
-
-    prev_dist = torch.norm(hand_pos_prev - obj_pos, dim=-1).min(dim = -1).values
-    curr_dist = torch.norm(hand_pos - obj_pos, dim=-1).min(dim = -1).values
-    
-    distance_filter = curr_dist > close_distance # distance filter computes whether the hand is close to object. If not close enough, it will be replaced with the "getting closer" reward. 
-    distance_filter = torch.logical_or(distance_filter, table_removed_flag) # if table is removed, replace with "getting closer" reward.
-    
-    closer_to_hand_r = torch.clamp(prev_dist - curr_dist, min=0, max=1/5)  # cap max at 1/5
-    
-    # Hand position reward
-    diff_global_body_pos = ref_hand_pos - hand_pos
-    distance = (diff_global_body_pos**2).mean(dim=-1)
-    distance[~close_hand_flag] = 0
-    diff_body_pos_dist = distance.sum(dim=-1)/(close_hand_flag.sum(dim=-1) + 1e-6)
-    r_body_pos = torch.exp(-k_pos * diff_body_pos_dist)
-    
-    distance_filter = torch.logical_or(distance_filter, close_hand_flag.sum(dim=-1) == 0) # replace with "getting closer" reward if the reference hand pose is no longer close to the object
 
     # hand rotation reward
     diff_global_body_rot = torch_utils.quat_mul(ref_hand_rot, torch_utils.quat_conjugate(hand_rot))
@@ -1700,127 +1205,7 @@ def compute_grab_reward(root_pos, root_rot, obj_pos, obj_rot, obj_vel, obj_ang_v
     # print(reward_raw.detach().numpy())
     
     return reward, reward_raw
-
-# V 1.5, no contact reward, use with stage. 
-@torch.jit.script
-def compute_grab_reward_v15(root_pos, root_rot, obj_pos, obj_rot, obj_vel, obj_ang_vel,  ref_obj_pos, ref_obj_rot, ref_body_vel, ref_body_ang_vel, contact_filter, rwd_specs):
-     # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor,Tensor,Tensor, Tensor, Tensor, Tensor, Dict[str, float]) -> Tuple[Tensor, Tensor]
-    k_pos, k_rot, k_vel, k_ang_vel = rwd_specs["k_pos"], rwd_specs["k_rot"], rwd_specs["k_vel"], rwd_specs["k_ang_vel"]
-    w_pos, w_rot, w_vel, w_ang_vel, w_conctact = rwd_specs["w_pos"], rwd_specs["w_rot"], rwd_specs["w_vel"], rwd_specs["w_ang_vel"], rwd_specs["w_conctact"]
-
-    # object position tracking reward
-    diff_global_body_pos = ref_obj_pos - obj_pos
-    diff_body_pos_dist = (diff_global_body_pos**2).mean(dim=-1).mean(dim=-1)
-    r_obj_pos = torch.exp(-k_pos * diff_body_pos_dist)
-
-    # object rotation tracking reward
-    diff_global_body_rot = torch_utils.quat_mul(ref_obj_rot, torch_utils.quat_conjugate(obj_rot))
-    diff_global_body_angle = torch_utils.quat_to_angle_axis(diff_global_body_rot)[0]
-    diff_global_body_angle_dist = (diff_global_body_angle**2).mean(dim=-1)
-    r_obj_rot = torch.exp(-k_rot * diff_global_body_angle_dist)
-
-    # object linear velocity tracking reward
-    diff_global_vel = ref_body_vel - obj_vel
-    diff_global_vel_dist = (diff_global_vel**2).mean(dim=-1).mean(dim=-1)
-    r_lin_vel = torch.exp(-k_vel * diff_global_vel_dist)
-
-    # object angular velocity tracking reward
-    diff_global_ang_vel = ref_body_ang_vel - obj_ang_vel
-    diff_global_ang_vel_dist = (diff_global_ang_vel**2).mean(dim=-1).mean(dim=-1)
-    r_ang_vel = torch.exp(-k_ang_vel * diff_global_ang_vel_dist)
-
-    r_contact_lifted = contact_filter.float() 
-
-    # # r_close = torch.exp(-k_pos * (hand_pos_diff.min(dim = -1).values **2))
-
-    # ##### pos_filter makes sure that no reward is given if the hand is too far from the object.
-    # # reward = (w_pos * r_obj_pos + w_rot * r_obj_rot + w_vel * r_lin_vel + w_ang_vel * r_ang_vel) * contact_filter + r_contact_lifted * w_conctact  + r_close * w_close
-    reward = (w_pos * r_obj_pos + w_rot * r_obj_rot + w_vel * r_lin_vel + w_ang_vel * r_ang_vel) * contact_filter
-    # # reward_raw = torch.stack([r_obj_pos, r_obj_rot, r_lin_vel, r_ang_vel, r_close], dim=-1)
-    reward_raw = torch.stack([r_obj_pos, r_obj_rot, r_lin_vel, r_ang_vel], dim=-1)
-    
-    # np.set_printoptions(precision=4, suppress=1)
-    # print(reward_raw.detach().numpy())
-    
-    return reward, reward_raw
-
-
-##### V2 reward, using 8 points instead of rotation reward. 
-@torch.jit.script
-def compute_grab_reward_v2(root_pos, root_rot, obj_pos, obj_rot, obj_vel, obj_ang_vel,  ref_obj_pos, ref_obj_rot, ref_body_vel, ref_body_ang_vel,  bounding_boxes, contact_filter, rwd_specs):
-     # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor, Tensor,Tensor, Tensor, Tensor, Tensor, Dict[str, float]) -> Tuple[Tensor, Tensor]
-    k_pos, k_rot, k_vel, k_ang_vel = rwd_specs["k_pos"], rwd_specs["k_rot"], rwd_specs["k_vel"], rwd_specs["k_ang_vel"]
-    w_pos, w_rot, w_vel, w_ang_vel, w_conctact = rwd_specs["w_pos"], rwd_specs["w_rot"], rwd_specs["w_vel"], rwd_specs["w_ang_vel"], rwd_specs["w_conctact"]
-    
-    B = obj_pos.shape[0]
-    
-    boungding_box_obj = torch_utils.my_quat_rotate(obj_rot.repeat(1, 8, 1).view(-1, 4), bounding_boxes.view(-1, 3)).view(B, 8, 3) + obj_pos
-    boungding_box_ref = torch_utils.my_quat_rotate(ref_obj_rot.repeat(1, 8, 1).view(-1, 4), bounding_boxes.view(-1, 3)).view(-1, 8, 3) + ref_obj_pos
-
-    alpha, beta = 30, 2
-    diff_global_body_pos = boungding_box_ref - boungding_box_obj
-    diff_body_pos_dist = diff_global_body_pos.norm(dim = -1, p = 2)
-    r_obj_pos = (1/(torch.exp(alpha * diff_body_pos_dist) + beta + torch.exp(-alpha * diff_body_pos_dist))).sum(dim = -1)/2
-    
-
-    # object linear velocity tracking reward
-    diff_global_vel = ref_body_vel - obj_vel
-    diff_global_vel_dist = (diff_global_vel**2).mean(dim=-1).mean(dim=-1)
-    r_lin_vel = torch.exp(-k_vel * diff_global_vel_dist)
-
-    # object angular velocity tracking reward
-    diff_global_ang_vel = ref_body_ang_vel - obj_ang_vel
-    diff_global_ang_vel_dist = (diff_global_ang_vel**2).mean(dim=-1).mean(dim=-1)
-    r_ang_vel = torch.exp(-k_ang_vel * diff_global_ang_vel_dist)
-
-    r_contact_lifted = contact_filter.float() 
-    # # r_close = torch.exp(-k_pos * (hand_pos_diff.min(dim = -1).values **2))
-
-    # ##### pos_filter makes sure that no reward is given if the hand is too far from the object.
-    # # reward = (w_pos * r_obj_pos + w_rot * r_obj_rot + w_vel * r_lin_vel + w_ang_vel * r_ang_vel) * contact_filter + r_contact_lifted * w_conctact  + r_close * w_close
-    reward = (w_pos * r_obj_pos + w_vel * r_lin_vel + w_ang_vel * r_ang_vel) * contact_filter + r_contact_lifted * w_conctact  
-    # # reward_raw = torch.stack([r_obj_pos, r_obj_rot, r_lin_vel, r_ang_vel, r_close], dim=-1)
-    reward_raw = torch.stack([r_obj_pos, r_lin_vel, r_ang_vel], dim=-1)
-    
-    return reward, reward_raw
-
-@torch.jit.script
-def compute_grab_observations_v4(root_pos, root_rot, fingertip_pos, fingertip_rot, ref_obj_pos, ref_obj_rot, ref_o_vel, ref_o_ang_vel, time_steps, upright):
-    # type: (Tensor, Tensor, Tensor, Tensor, Tensor,Tensor, Tensor, Tensor, int, bool) -> Tensor
-    # Image based. Only future object tracks. 
-    obs = []
-    B, _, _ = fingertip_pos.shape
-    J = 1
-    if not upright:
-        root_rot = remove_base_rot(root_rot)
-        
-    heading_inv_rot = torch_utils.calc_heading_quat_inv(root_rot)
-    heading_rot = torch_utils.calc_heading_quat(root_rot)
-    heading_inv_rot_expand = heading_inv_rot.unsqueeze(-2).repeat((1, J, 1)).repeat_interleave(time_steps, 0)
-    heading_rot_expand = heading_rot.unsqueeze(-2).repeat((1, J, 1)).repeat_interleave(time_steps, 0)
-    
-
-    ##### Body position and rotation differences
-    ref_global_body_pos = ref_obj_pos.view(B, time_steps, J, 3) - root_pos.view(B, 1, J, 3)
-    ref_local_body_pos_flat = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), ref_global_body_pos.view(-1, 3))
-
-    ref_global_body_rot = torch_utils.quat_mul(ref_obj_rot.view(B, time_steps, J, 4), torch_utils.quat_conjugate(root_rot[:, None, None]).repeat_interleave(time_steps, 1))
-    ref_local_body_rot_flat = torch_utils.quat_mul(torch_utils.quat_mul(heading_inv_rot_expand.view(-1, 4), ref_global_body_rot.view(-1, 4)), heading_rot_expand.view(-1, 4))  # Need to be change of basis
-    
-    ##### linear and angular  Velocity differences
-    ref_local_vel = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), ref_o_vel.view(-1, 3))
-    ref_local_ang_vel = torch_utils.my_quat_rotate(heading_inv_rot_expand.view(-1, 4), ref_o_ang_vel.view(-1, 3))
-    
-
-    
-    obs.append(ref_local_body_pos_flat.view(B, -1))  # 1 * timestep * 1 * 3
-    obs.append(torch_utils.quat_to_tan_norm(ref_local_body_rot_flat).view(B, -1))  #  1 * timestep * 1 * 6
-    obs.append(ref_local_vel.view(B, -1))  # timestep  * 1 * 3
-    obs.append(ref_local_ang_vel.view(B, -1))  # timestep  * 1 * 3
-    
-    obs = torch.cat(obs, dim=-1).view(B, -1)
-    return obs
-
+ 
 @torch.jit.script
 def compute_humanoid_grab_reset(reset_buf, progress_buf, contact_buf, contact_body_ids, obj_pos, obj_rot, ref_obj_pos, ref_obj_rot, hand_pos, pass_time, enable_early_termination, termination_distance, disableCollision, check_rot_reset):
     # type: (Tensor, Tensor, Tensor, Tensor, Tensor, Tensor,Tensor, Tensor, Tensor, Tensor, bool, Tensor, bool, bool) -> Tuple[Tensor, Tensor]

@@ -143,3 +143,4 @@ output_videos/
 *.pt
 new_trials
 gh-md-toc
+sample_data/

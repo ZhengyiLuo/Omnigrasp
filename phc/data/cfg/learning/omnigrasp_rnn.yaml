@@ -35,7 +35,7 @@ params:
         name: None
         
     task_mlp:
-      units: [1536, 1024, 512]
+      units: [256, 256]
       activation: silu
       d2rl: False
 
@@ -77,7 +77,7 @@ params:
     max_epochs: 10000000
     save_best_after: 100
     save_frequency: 1000
-    eval_frequency: 1000
+    eval_frequency: 250
     print_stats: False
     save_intermediate: True
     entropy_coef: 0.0
