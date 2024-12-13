@@ -12,7 +12,13 @@ Official implementation of NeurIPS 2024 paper: "Omnigrasp: Grasping Diverse Obje
 ## News 🚩
 
 
+[December 12, 2024] Release inference code and models. 
+
 ## TODOs
+
+- [ ] Release character drawing code. 
+- [ ] Release training code (mainly the data processing part). 
+- [x] Release inference code. 
 
 
 ### Dependencies
@@ -78,6 +84,8 @@ bash download_data.sh
 ... more shortcut can be found in `phc/env/tasks/base_task.py`
 
 
+### Inference on GRAB objects + random trajectories
+
 To evaluate a trained policy on the GRAB dataset, run the following script:
 
 ```
@@ -90,6 +98,11 @@ python phc/run_hydra.py  \
 ```
 
 Rendering the above trajectory might be slow, to speed up, use less number of environments or disable object trajectory rendering by press "k". 
+
+
+### Tracing words in air 
+
+[Coming soon]
 
 
 ## Training 
