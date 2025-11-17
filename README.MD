@@ -134,6 +134,8 @@ To setup the GRAB dataset, please follow the following instructions:
 2. Run the following script to process the dataset:
 
 ```
+python scripts/data_process?process_grab_raw.py
+python scripts/compute_bps.py
 python scripts/data_process/convert_grab_smplx.py
 ```
 

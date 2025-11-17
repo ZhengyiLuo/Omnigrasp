@@ -65,7 +65,7 @@ for k, v in data_load.items():
 objects.remove("doorknob")
 object_code_dict = {}
 for object_name in objects:
-    object_code_dict[object_name] = torch.load(f"data/amass_x/grab/grab_codes_v1/{object_name}.pkl")
+    object_code_dict[object_name] = torch.load(f"data/amass_x/grab/grab_codes_v1/{object_name}.pkl") # ZL: BPS codes for grab
 
 data_dump_full = OrderedDict()
 for object_name in objects:
